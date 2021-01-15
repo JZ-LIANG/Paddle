@@ -108,12 +108,8 @@ class Optimizer(object):
         self.regularization = regularization
         self._grad_clip = grad_clip
         self._learning_rate = learning_rate
-
+        # the learning rate type should be inferenced from loss
         self._dtype = None
-        # Infer the dtype form parameter
-        if self._parameter_list:
-            self._dtype = self._parameter_list[0].dtype
-
         # each program should have a independent learning rate
         # program -> Variable(learning_rate)
         self._learning_rate_map = dict()
@@ -772,10 +768,7 @@ class Optimizer(object):
         else:
             act_no_grad_set = self._get_no_grad_set(loss, no_grad_set)
 
-        # Infer dtype by loss if None
-        if self._dtype is None:
-            self._dtype = loss.dtype
-
+        self._dtype = loss.dtype
         if framework.in_dygraph_mode():
             parameter_list = parameter_list if parameter_list \
                 else self._parameter_list
@@ -4764,7 +4757,7 @@ class RecomputeOptimizer(Optimizer):
         return
 
     def _insert_async_memcpy_op(self, insert_idx, src_varname, dst_varname,
-                                op_role, kind):
+                                op_role, dst_place_type):
         OP_ROLE_KEY = core.op_proto_and_checker_maker.kOpRoleAttrName()
         self.block._insert_op_without_sync(
             insert_idx,
@@ -4773,8 +4766,10 @@ class RecomputeOptimizer(Optimizer):
             outputs={
                 'Out': [self._main_program.global_block().var(dst_varname)]
             },
-            attrs={"dst_place_type": int(kind),
-                   OP_ROLE_KEY: op_role})
+            attrs={
+                "dst_place_type": int(dst_place_type),
+                OP_ROLE_KEY: op_role
+            })
 
     def _insert_fetch_op(self, idx, varname):
         assert varname in self.checkpoint_name2pinned_name, "Try to fetch {} from Pinned Memory, but it is NOT a checkpoint".format(
@@ -4782,13 +4777,13 @@ class RecomputeOptimizer(Optimizer):
 
         pinned_varname = self.checkpoint_name2pinned_name[varname]
         fetch_varname = self.checkpoint_name2fetch_name[varname]
-        self._insert_async_memcpy_op(idx, pinned_varname, fetch_varname, 1, 2)
+        self._insert_async_memcpy_op(idx, pinned_varname, fetch_varname, 1, 1)
 
     def _insert_offload_op(self, idx, varname):
         assert varname in self.checkpoint_name2pinned_name, "Try to offload {} to Pinned Memory, but it is NOT a checkpoint".format(
             varname)
         pinned_varname = self.checkpoint_name2pinned_name[varname]
-        self._insert_async_memcpy_op(idx, varname, pinned_varname, 0, 3)
+        self._insert_async_memcpy_op(idx, varname, pinned_varname, 0, 2)
 
     def _insert_sync_op(self, op_idx, checkpoint_name):
         # single stream offload no need sync 
