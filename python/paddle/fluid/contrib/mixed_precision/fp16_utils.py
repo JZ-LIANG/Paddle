@@ -123,8 +123,7 @@ def _insert_cast_op(block, op, idx, src_dtype, dest_dtype):
                         outputs={"Out": out_var},
                         attrs={
                             "in_dtype": in_var.dtype,
-                            "out_dtype": out_var.dtype,
-                            "op_device": op.attr("op_device")
+                            "out_dtype": out_var.dtype
                         })
                     num_cast_ops += 1
                 _rename_arg(op, in_var.name, out_var.name)
@@ -172,11 +171,8 @@ def _insert_cast_post_op(block, op, idx, src_dtype, dest_dtype, target_name,
             type="cast",
             inputs={"X": target_var},
             outputs={"Out": cast_var},
-            attrs={
-                "in_dtype": target_var.dtype,
-                "out_dtype": cast_var.dtype,
-                "op_device": op.attr("op_device")
-            })
+            attrs={"in_dtype": target_var.dtype,
+                   "out_dtype": cast_var.dtype})
         num_cast_ops += 1
         op_var_rename_map[block.idx][target_var.name] = cast_var.name
 
