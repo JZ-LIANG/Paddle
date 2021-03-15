@@ -425,6 +425,8 @@ class ShardingOptimizer(MetaOptimizerBase):
         var2broadcast_time = dict()
         segment = ProgramSegment(block)
         segment._end_idx = last_backward_op_idx
+
+        meet_first_lrsched_op = False
         for op_idx in reversed(range(last_backward_op_idx)):
             op = block.ops[op_idx]
             assert (int(op.attr('op_role')) != int(OpRole.Optimize))
@@ -433,16 +435,8 @@ class ShardingOptimizer(MetaOptimizerBase):
                     segment = self.collect_segment(segment, op_idx, block)
 
             elif self._sharding_segment_strategy == "anchors":
-                if int(op.attr('op_role')) == int(OpRole.Backward):
+                if int(op.attr('op_role')) == int(OpRole.Backward) and op.type == "matmul_grad":
                     for input_name in op.desc.input_arg_names():
-
-                        # NOTE (JZ-LIANG) naive rule to support amp, if amp change, should modify here accordingly
-                        if 'AMPOptimizer' in fleet._get_applied_meta_list():
-                            if ".cast_fp16@GRAD" not in input_name:
-                                continue
-                            else:
-                                input_name = input_name[:input_name.find(".cast_fp16@GRAD")]
-
                         if input_name in self._backward_remain_anchors:
                             logging.info("backward segment:")
                             logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
@@ -450,14 +444,19 @@ class ShardingOptimizer(MetaOptimizerBase):
                             assert input_name not in self._forward_remain_anchors, "segment anchor [{}] met twice !".format(input_name)
                             self._backward_remain_anchors.remove(input_name)
                             self._forward_remain_anchors.append(input_name)
-                elif int(op.attr('op_role')) == int(OpRole.Forward):
+                elif int(op.attr('op_role')) == int(OpRole.Forward) and op.type == "layer_norm":
                     for output_name in op.desc.output_arg_names():
                         if output_name in self._forward_remain_anchors:
                             logging.info("forward segment:")
                             logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
                             segment = self.collect_segment(segment, op_idx, block)
                             self._forward_remain_anchors.remove(output_name)
-
+                elif int(op.attr('op_role')) == int(OpRole.Optimize.LRSched) and not meet_first_lrsched_op:
+                    meet_first_lrsched_op = True
+                    logging.info("lr_sched op:")
+                    logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
+                    segment = self.collect_segment(segment, op_idx, block)
+                    self._backward_remain_anchors = []
 
             # find broadcast vars
             for input_name in op.desc.input_arg_names():
