@@ -424,7 +424,7 @@ class ShardingOptimizer(MetaOptimizerBase):
                             logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
                             segment = self.collect_segment(segment, op_idx, block)
                             self._forward_remain_anchors.remove(output_name)
-                elif int(op.attr('op_role')) == int(OpRole.Optimize.LRSched) and not meet_first_lrsched_op:
+                elif int(op.attr('op_role')) == int(OpRole.Optimize.LRSched) and op.type == "conditional_block" and not meet_first_lrsched_op:
                     meet_first_lrsched_op = True
                     logging.info("lr_sched op:")
                     logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
@@ -492,9 +492,9 @@ class ShardingOptimizer(MetaOptimizerBase):
             self._segments.insert(0, segment)
 
 
-        if self._sharding_segment_strategy == "anchors":
-            assert len(self._forward_remain_anchors) == 0, "remain anchors: {}".format(self._forward_remain_anchors)
-            assert len(self._backward_remain_anchors) == 0, "remain anchors: {}".format(self._backward_remain_anchors)
+        # if self._sharding_segment_strategy == "anchors":
+        #     assert len(self._forward_remain_anchors) == 0, "remain anchors: {}".format(self._forward_remain_anchors)
+        #     assert len(self._backward_remain_anchors) == 0, "remain anchors: {}".format(self._backward_remain_anchors)
 
         for varname in sorted(var2broadcast_time, key=var2broadcast_time.get, reverse=True):
             logging.info("Sharding broadcast: [{}] times [{}]".format(var2broadcast_time[varname], varname))
