@@ -412,6 +412,7 @@ class ShardingOptimizer(MetaOptimizerBase):
                     for input_name in op.desc.input_arg_names():
                         if input_name in self._backward_remain_anchors:
                             logging.info("backward segment:")
+                            logging.info("segment broadcast size: [{}]".format(segment._param_mem))
                             logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
                             segment = self.collect_segment(segment, op_idx, block)
                             assert input_name not in self._forward_remain_anchors, "segment anchor [{}] met twice !".format(input_name)
@@ -421,6 +422,7 @@ class ShardingOptimizer(MetaOptimizerBase):
                     for output_name in op.desc.output_arg_names():
                         if output_name in self._forward_remain_anchors:
                             logging.info("forward segment:")
+                            logging.info("segment broadcast size: [{}]".format(segment._param_mem))
                             logging.info("op [{}] input [{}] output [{}]".format(op.desc.type() ,op.desc.input_arg_names(), op.desc.output_arg_names()))
                             segment = self.collect_segment(segment, op_idx, block)
                             self._forward_remain_anchors.remove(output_name)
