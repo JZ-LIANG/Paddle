@@ -445,6 +445,8 @@ class ShardingOptimizer(MetaOptimizerBase):
             ]:
                 pass
             elif op.type == "conditional_block":
+                # new amp naive rule
+                continue
                 assert (op.desc.has_attr("sub_block"))
                 subblock_idx = op.desc.attr("sub_block").id
                 subblock_deps = program_deps.get_sub_block_deps(subblock_idx)
@@ -1021,6 +1023,16 @@ class ShardingOptimizer(MetaOptimizerBase):
                 if output_name not in already_moved_var_names and output_name not in self._grad2merged_grad.keys(
                 ):
                     var_ = self._main_program.global_block().var(output_name)
+                    # new amp naive rule
+                    if var_.type == core.VarDesc.VarType.STEP_SCOPES:
+                        name_ = var_.name
+                        self._main_program.global_block()._remove_var(
+                            var_.name, sync=False)
+                        self.cond_block.create_var(
+                            name=name_, type=core.VarDesc.VarType.STEP_SCOPES)
+                        already_moved_var_names.append(name_)
+                        continue
+
                     if not var_.persistable:
                         # move
                         name_ = var_.name
