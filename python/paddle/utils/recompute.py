@@ -18,6 +18,9 @@ from paddle.autograd import PyLayer
 from paddle.fluid import framework
 import contextlib
 
+# TODO remove
+import numpy as np
+
 import logging
 logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
@@ -95,17 +98,20 @@ class RecomputeFunction(PyLayer):
                     "Recompute with RNG perserve is not support current device: {}.".
                     format(cur_device))
             ctx.fw_cuda_rng_state = paddle.get_cuda_rng_state()
+            print("fw rng id:", id(ctx.fw_cuda_rng_state))
 
         # TODO support AMP
 
         with paddle.no_grad():
             outputs = run_function(*args)
-
+            ctx.compare = np.asarray(outputs[0])
+            # print(np.asarray(outputs[0][:20]))
         return outputs
 
     @staticmethod
     def backward(ctx, *args):
         with paddle.fluid.dygraph.guard():
+            print("recompute backward !!!")
             # TODO need to check the recompute calling is vaild or not
 
             # Restore inputs
@@ -122,9 +128,12 @@ class RecomputeFunction(PyLayer):
             # TODO support AMP
 
             if ctx.preserve_rng_state:
+                print("bw rng id:", id(ctx.fw_cuda_rng_state))
                 with swith_rng_state(ctx.fw_cuda_rng_state):
                     detached_inputs = detach_variable(tuple(inputs))
                     outputs = ctx.run_function(*detached_inputs)
+                # print(np.asarray(outputs[0][:20]))
+                # assert np.array_equal(np.asarray(outputs[0]), ctx.compare)
             else:
                 detached_inputs = detach_variable(tuple(inputs))
                 outputs = ctx.run_function(*detached_inputs)
@@ -153,8 +162,18 @@ class RecomputeFunction(PyLayer):
             # actually backward            
             paddle.autograd.backward(forward_outputs_with_grad, backward_inputs)
 
-            grads = tuple(inp._grad_ivar() for inp in detached_inputs
-                          if isinstance(inp, core.VarBase))
+            grads = list(inp._grad_ivar() for inp in detached_inputs
+                         if isinstance(inp, core.VarBase))
+
+            # grads = []
+            # for inp in detached_inputs:
+            #     if isinstance(inp, core.VarBase) and inp.stop_gradient == False :
+            #         grads.append(inp._grad_ivar())
+            #     elif isinstance(inp, core.VarBase) and inp.stop_gradient == True :
+            # #         grads.append(paddle.zeros_like(inp))
+            # import numpy as np
+            # for grad in grads :
+            #     print(grad)
 
             return grads
 

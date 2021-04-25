@@ -14,7 +14,7 @@
 
 import paddle
 import numpy as np
-from paddle.utils import checkpoint
+from paddle.utils import recompute
 import random
 
 paddle.seed(10)
@@ -27,8 +27,11 @@ def get_fc_block(block_idx, input_size, is_last=False):
     block = paddle.nn.Sequential(
         (block_name + "_fc_0", paddle.nn.Linear(
             input_size, input_size, bias_attr=False)),
+        (block_name + "_dropout", paddle.nn.Dropout(p=0.5)),
+        (block_name + "_relu_1", paddle.nn.ReLU()),
         (block_name + "_fc_1", paddle.nn.Linear(
-            input_size, input_size, bias_attr=False)), )
+            input_size, input_size, bias_attr=False)),
+        (block_name + "_relu_2", paddle.nn.ReLU()), )
     if is_last:
         block.add_sublayer(
             block_name + "_fc_2",
@@ -43,36 +46,48 @@ def get_fc_block(block_idx, input_size, is_last=False):
 
 
 class MyModel(paddle.nn.Layer):
-    def __init__(self, input_size=10, checkpoint_blocks=[]):
+    def __init__(self, input_size=10, recompute_blocks=[1, 3]):
         super(MyModel, self).__init__()
-        self.checkpoint_blocks = checkpoint_blocks
+        self.recompute_blocks = recompute_blocks
         self.runfunc0 = get_fc_block(0, input_size, is_last=False)
         self.runfunc1 = get_fc_block(1, input_size, is_last=False)
-        self.runfunc2 = get_fc_block(2, input_size, is_last=True)
+        self.runfunc2 = get_fc_block(2, input_size, is_last=False)
+        self.runfunc3 = get_fc_block(3, input_size, is_last=False)
+        self.runfunc4 = get_fc_block(4, input_size, is_last=True)
 
     def forward(self, inputs):
 
-        if 0 in self.checkpoint_blocks:
-            inputs = checkpoint(self.runfunc0, inputs, preserve_rng_state=False)
+        if 0 in self.recompute_blocks:
+            inputs = recompute(self.runfunc0, inputs, preserve_rng_state=False)
         else:
             inputs = self.runfunc0(inputs)
 
-        if 1 in self.checkpoint_blocks:
-            inputs = checkpoint(self.runfunc1, inputs, preserve_rng_state=False)
+        if 1 in self.recompute_blocks:
+            inputs = recompute(self.runfunc1, inputs, preserve_rng_state=False)
         else:
             inputs = self.runfunc1(inputs)
 
-        if 2 in self.checkpoint_blocks:
-            inputs = checkpoint(self.runfunc2, inputs, preserve_rng_state=False)
+        if 2 in self.recompute_blocks:
+            inputs = recompute(self.runfunc2, inputs, preserve_rng_state=False)
         else:
             inputs = self.runfunc2(inputs)
+
+        if 3 in self.recompute_blocks:
+            inputs = recompute(self.runfunc3, inputs, preserve_rng_state=False)
+        else:
+            inputs = self.runfunc3(inputs)
+
+        if 4 in self.recompute_blocks:
+            inputs = recompute(self.runfunc4, inputs, preserve_rng_state=False)
+        else:
+            inputs = self.runfunc4(inputs)
 
         return inputs
 
 
 def main():
     batch_size, input_size = 1, 10
-    model = MyModel(input_size, checkpoint_blocks=[0, 1])
+    model = MyModel(input_size, recompute_blocks=[1, 3])
     loss_fn = paddle.nn.MSELoss(reduction='mean')
     optimizer = paddle.optimizer.SGD(learning_rate=0.01,
                                      parameters=model.parameters())
@@ -85,13 +100,13 @@ def main():
 
     for step in range(10):
         x_data = np.random.randn(batch_size, input_size).astype(np.float32)
-        y_data = np.random.randn(batch_size, 1).astype(np.float32)
+        # y_data = np.random.randn(batch_size, 1).astype(np.float32)
         x = paddle.to_tensor(x_data)
-        y = paddle.to_tensor(y_data)
-        # x.stop_gradient = False
+        # y = paddle.to_tensor(y_data)
+        x.stop_gradient = False
         y_pred = model(x)
         # y_pred.stop_gradient = False
-        loss = loss_fn(y_pred, y)
+        loss = y_pred.mean()
         print("######" * 2 + "step [{}]".format(step) + "######" * 2)
         print("y_pred: ", y_pred)
         print("loss: ", loss)

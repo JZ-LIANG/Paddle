@@ -29,7 +29,7 @@ def get_bert_config():
         "intermediate_size": 72,
         "max_position_embeddings": 512,
         "num_attention_heads": 2,
-        "num_hidden_layers": 2,
+        "num_hidden_layers": 3,
         "pooler_fc_size": 2,
         "pooler_num_attention_heads": 2,
         "pooler_num_fc_layers": 3,
@@ -319,7 +319,7 @@ class ModelHyperParams(object):
     generate_neg_sample = False
     epoch = 100
     max_seq_len = 512
-    batch_size = 8192
+    batch_size = 512
     in_tokens = True
 
 

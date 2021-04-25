@@ -17,6 +17,7 @@ from __future__ import print_function
 import numpy as np
 
 import paddle.fluid as fluid
+from paddle.nn.functional import dropout
 import paddle.fluid.layers as layers
 from paddle.fluid.dygraph import Embedding, Layer, LayerNorm, Linear, to_variable
 from paddle.fluid.dygraph.jit import dygraph_to_static_func
@@ -62,14 +63,22 @@ class PrePostProcessLayer(Layer):
                             bias_attr=fluid.ParamAttr(
                                 initializer=fluid.initializer.Constant(0.)))))
             elif cmd == "d":  # add dropout
-                if dropout_rate:
-                    self.functors.append(lambda x: layers.dropout(
-                        x, dropout_prob=dropout_rate))
+                # if dropout_rate:
+                # self.functors.append(lambda x: layers.dropout(
+                #     x, dropout_prob=dropout_rate))
+
+                self.functors.append(lambda x: dropout(x, p=dropout_rate))
 
     def forward(self, x, residual=None):
         for i, cmd in enumerate(self.process_cmd):
             if cmd == "a":
                 x = self.functors[i](x, residual)
+            elif cmd == "d":
+                print("before proc dropout: ")
+                print(np.asarray(x)[0][:20])
+                x = self.functors[i](x)
+                print("after proc dropout: ")
+                print(np.asarray(x)[0][:20])
             else:
                 x = self.functors[i](x)
         return x
@@ -136,9 +145,14 @@ class MultiHeadAttention(Layer):
         if attn_bias is not None:
             product += attn_bias
         weights = layers.softmax(product)
-        if self.dropout_rate:
-            weights = layers.dropout(weights, dropout_prob=self.dropout_rate)
-            out = layers.matmul(weights, v)
+        # if self.dropout_rate:
+        # weights = layers.dropout(weights, dropout_prob=self.dropout_rate)
+        print("before MH dropout: ")
+        print(np.asarray(weights)[0][:20])
+        weights = dropout(weights, p=self.dropout_rate)
+        print("after MH dropout: ")
+        print(np.asarray(weights)[0][:20])
+        out = layers.matmul(weights, v)
         out = layers.transpose(out, perm=[0, 2, 1, 3])
         out = layers.reshape(x=out, shape=[0, 0, out.shape[2] * out.shape[3]])
         out = self.proj_fc(out)
@@ -154,8 +168,13 @@ class FFN(Layer):
 
     def forward(self, x):
         hidden = self.fc1(x)
-        if self.dropout_rate:
-            hidden = layers.dropout(hidden, dropout_prob=self.dropout_rate)
+        # if self.dropout_rate:
+        # hidden = layers.dropout(hidden, dropout_prob=self.dropout_rate)
+        print("before FFN dropout: ")
+        print(np.asarray(hidden)[0][:20])
+        hidden = dropout(hidden, p=self.dropout_rate)
+        print("after FFN dropout: ")
+        print(np.asarray(hidden)[0][:20])
         out = self.fc2(hidden)
         return out
 
@@ -273,9 +292,12 @@ class WrapEncoder(Layer):
         pos_enc = self.pos_encoder(src_pos)
         pos_enc.stop_gradient = True
         emb = word_emb + pos_enc
-        enc_input = layers.dropout(
+        # enc_input = layers.dropout(
+        #     emb,
+        #     dropout_prob=self.emb_dropout, ) #if self.emb_dropout else emb        
+        enc_input = dropout(
             emb,
-            dropout_prob=self.emb_dropout, ) if self.emb_dropout else emb
+            dropout_prob=self.emb_dropout, )  #if self.emb_dropout else emb
         enc_output = self.encoder(enc_input, src_slf_attn_bias)
         return enc_output
 
@@ -404,9 +426,9 @@ class WrapDecoder(Layer):
         pos_enc = self.pos_encoder(trg_pos)
         pos_enc.stop_gradient = True
         emb = word_emb + pos_enc
-        dec_input = layers.dropout(
+        dec_input = dropout(
             emb,
-            dropout_prob=self.emb_dropout, ) if self.emb_dropout else emb
+            dropout_prob=self.emb_dropout, )  #if self.emb_dropout else emb
         dec_output = self.decoder(dec_input, enc_output, trg_slf_attn_bias,
                                   trg_src_attn_bias, caches)
         dec_output = layers.reshape(

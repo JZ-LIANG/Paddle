@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function
 import paddle.fluid as fluid
 from paddle.fluid.dygraph import Embedding, Layer, Linear
 from paddle.fluid.dygraph.jit import declarative
+from paddle.utils import recompute
 
 from transformer_dygraph_model import MultiHeadAttention, PrePostProcessLayer
 
@@ -153,10 +154,26 @@ class EncoderLayer(Layer):
                         name=name + '_layer_' + str(i))))
 
     def forward(self, enc_input, attn_bias):
+        if_recompute = True
         for i in range(self._n_layer):
-            enc_output = self._encoder_sublayers[i](enc_input, attn_bias)
-            enc_input = enc_output
-
+            if i > 0 and i < (self._n_layer - 1) and if_recompute:
+                print("#####" + "recompute start" + "#####")
+                print("input:", enc_input)
+                enc_output = recompute(
+                    self._encoder_sublayers[i],
+                    enc_input,
+                    attn_bias,
+                    preserve_rng_state=True)
+                enc_input = enc_output
+                print("#####" + "recompute end" + "#####")
+            else:
+                if i > 0 and i < (self._n_layer - 1):
+                    print("#####" + " start" + "#####")
+                    print("input:", enc_input)
+                enc_output = self._encoder_sublayers[i](enc_input, attn_bias)
+                enc_input = enc_output
+                if i > 0 and i < (self._n_layer - 1):
+                    print("#####" + " end" + "#####")
         return self._preprocess_layer(enc_output)
 
 
