@@ -110,18 +110,31 @@ class DistributedReshapeImpl0(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "Dist op of Reshape input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "Dist op of Reshape output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "Dist op of Reshape input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['ShapeTensor']
+        ) <= 1, "Dist op of Reshape input ShapeTensor take 0 or 1 variable but got {}".format(
+            kwargs['ShapeTensor'])
+        assert len(
+            kwargs['Shape']
+        ) <= 1, "Dist op of Reshape input Shape take 0 or 1 variable but got {}".format(
+            kwargs['Shape'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "Dist op of Reshape input Out take 1 variable but got {}".format(
+            kwargs['Out'])
+        assert len(
+            kwargs['XShape']
+        ) == 1, "Dist op of Reshape input XShape take 1 variable but got {}".format(
+            kwargs['XShape'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Out_var = dst_block.var(kwargs['Out'][0])
@@ -230,18 +243,31 @@ class DistributedReshapeImpl1(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "Dist op of Reshape input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "Dist op of Reshape output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "Dist op of Reshape input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['ShapeTensor']
+        ) <= 1, "Dist op of Reshape input ShapeTensor take 0 or 1 variable but got {}".format(
+            kwargs['ShapeTensor'])
+        assert len(
+            kwargs['Shape']
+        ) <= 1, "Dist op of Reshape input Shape take 0 or 1 variable but got {}".format(
+            kwargs['Shape'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "Dist op of Reshape output Out take 1 variable but got {}".format(
+            kwargs['Out'])
+        assert len(
+            kwargs['XShape']
+        ) == 1, "Dist op of Reshape output XShape take 1 variable but got {}".format(
+            kwargs['XShape'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Out_var = dst_block.var(kwargs['Out'][0])

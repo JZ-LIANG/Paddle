@@ -190,18 +190,23 @@ class DistributedMatmulImpl0(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "col_parallel_linear input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "col_parallel_linear output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "col_parallel_linear input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['Y']
+        ) == 1, "col_parallel_linear input Y take 1 variable but got {}".format(
+            kwargs['Y'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "col_parallel_linear output Out take 1 variable but got {}".format(
+            kwargs['Out'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Weight_var = dst_block.var(kwargs['Y'][0])
@@ -319,18 +324,23 @@ class DistributedMatmulImpl1(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "row_parallel_linear input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "row_parallel_linear output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "row_parallel_linear input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['Y']
+        ) == 1, "row_parallel_linear input Y take 1 variable but got {}".format(
+            kwargs['Y'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "row_parallel_linear output Out take 1 variable but got {}".format(
+            kwargs['Out'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Weight_var = dst_block.var(kwargs['Y'][0])
@@ -515,18 +525,23 @@ class DistributedMatmulV2Impl0(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "col_parallel_linear input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "col_parallel_linear output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "col_parallel_linear input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['Y']
+        ) == 1, "col_parallel_linear input Y take 1 variable but got {}".format(
+            kwargs['Y'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "col_parallel_linear output Out take 1 variable but got {}".format(
+            kwargs['Out'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Weight_var = dst_block.var(kwargs['Y'][0])
@@ -643,18 +658,23 @@ class DistributedMatmulV2Impl1(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "row_parallel_linear input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "row_parallel_linear output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['X']
+        ) == 1, "row_parallel_linear input X take 1 variable but got {}".format(
+            kwargs['X'])
+        assert len(
+            kwargs['Y']
+        ) == 1, "row_parallel_linear input Y take 1 variable but got {}".format(
+            kwargs['Y'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "row_parallel_linear output Out take 1 variable but got {}".format(
+            kwargs['Out'])
 
         X_var = dst_block.var(kwargs['X'][0])
         Weight_var = dst_block.var(kwargs['Y'][0])

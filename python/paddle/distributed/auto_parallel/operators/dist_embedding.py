@@ -114,18 +114,23 @@ class DistributedEmbeddingImpl(DistributedOperatorImpl):
 
         # check validation of inputs / outputs 
         for input_name in src_op.desc.input_names():
-            assert input_name in kwargs, "input [{}] is not given".format(
+            assert input_name in kwargs, "row_parallel_embedding input [{}] is not given".format(
                 input_name)
-            assert len(kwargs[input_name]) == len(
-                src_op.desc.input(input_name)
-            ), "number of tensor for input [{}] is not match".format(input_name)
         for output_name in src_op.desc.output_names():
-            assert output_name in kwargs, "input [{}] is not given".format(
+            assert output_name in kwargs, "row_parallel_embedding output [{}] is not given".format(
                 output_name)
-            assert len(kwargs[output_name]) == len(
-                src_op.desc.output(output_name)
-            ), "number of tensor for input [{}] is not match".format(
-                output_name)
+        assert len(
+            kwargs['Ids']
+        ) == 1, "row_parallel_embedding input Ids take 1 variable but got {}".format(
+            kwargs['Ids'])
+        assert len(
+            kwargs['W']
+        ) == 1, "row_parallel_embedding input W take 1 variable but got {}".format(
+            kwargs['W'])
+        assert len(
+            kwargs['Out']
+        ) == 1, "row_parallel_embedding input Out take 1 variable but got {}".format(
+            kwargs['Out'])
 
         Ids_var = dst_block.var(kwargs['Ids'][0])
         Weight_var = dst_block.var(kwargs['W'][0])
