@@ -129,11 +129,11 @@ class DistributedReshapeImpl0(DistributedOperatorImpl):
             kwargs['Shape'])
         assert len(
             kwargs['Out']
-        ) == 1, "Dist op of Reshape input Out take 1 variable but got {}".format(
+        ) == 1, "Dist op of Reshape output Out take 1 variable but got {}".format(
             kwargs['Out'])
         assert len(
             kwargs['XShape']
-        ) == 1, "Dist op of Reshape input XShape take 1 variable but got {}".format(
+        ) == 1, "Dist op of Reshape output XShape take 1 variable but got {}".format(
             kwargs['XShape'])
 
         X_var = dst_block.var(kwargs['X'][0])

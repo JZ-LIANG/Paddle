@@ -129,7 +129,7 @@ class DistributedEmbeddingImpl(DistributedOperatorImpl):
             kwargs['W'])
         assert len(
             kwargs['Out']
-        ) == 1, "row_parallel_embedding input Out take 1 variable but got {}".format(
+        ) == 1, "row_parallel_embedding output Out take 1 variable but got {}".format(
             kwargs['Out'])
 
         Ids_var = dst_block.var(kwargs['Ids'][0])
