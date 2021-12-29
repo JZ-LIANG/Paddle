@@ -206,80 +206,19 @@ def _right_operand_parameter_matmul_backward(ctx, *args, **kwargs):
             # row parallel: c_identity + matmul
             assert Y_var_dim_mapping[1] < 0
             parallel_axis = Y_var_dim_mapping[0]
-
-            check_variable_and_dtype(
-                Out_grad, 'tensor',
-                ['float16', 'float32', 'float64', 'int32', 'int64'],
-                '_c_identity')
-
-            intermediate_var_0 = main_block.create_var(
-                name=unique_name.generate_with_ignorable_key(".".join(
-                    ["c_identity", 'tmp'])) + "@GRAD",
-                dtype=Out_grad.dtype,
-                shape=Out_grad.shape,
-                type=core.VarDesc.VarType.LOD_TENSOR,
-                persistable=False,
-                stop_gradient=Out_grad.stop_gradient)
-
-            # copy X_var's dist_attr to intermediate_var_0's dist_attr
-            out_grad_dist_attr = dist_attr.get_input_dist_attr(Out_grad.name)
-            assert out_grad_dist_attr is not None
-            ctx.set_tensor_dist_attr_for_program(intermediate_var_0,
-                                                 out_grad_dist_attr)
-
-            group_ranks = _get_comm_group(
-                process_mesh_group, process_mesh_shape, parallel_axis, rank_id)
-            group = new_process_group(group_ranks)
-            c_identity_op = main_block.append_op(
-                type='c_identity',
-                inputs={'X': [Out_grad]},
-                outputs={'Out': intermediate_var_0},
-                attrs={
-                    'ring_id': group.id,
-                    'use_calc_stream': True,
-                    'use_model_parallel': True,
-                    OP_ROLE_KEY: OpRole.Backward,
-                })
-            check_variable_and_dtype(intermediate_var_0, 'x',
-                                     ['float16', 'float32', 'float64'],
-                                     'linear')
-            check_dtype(intermediate_var_0.dtype, 'dtype',
-                        ['float16', 'float32', 'float64'], 'linear')
-            set_comm_op_dist_attr_for_program(
-                c_identity_op, dist_attr.process_mesh, out_grad_dist_attr, ctx)
-
             new_kwargs = copy.deepcopy(kwargs)
-            new_kwargs['Out@GRAD'] = [intermediate_var_0.name]
+            new_kwargs['Out@GRAD'] = [Out_grad.name]
             matmul_op_desc = copy_op_with_new_input_output(
                 main_block, backward_op, **new_kwargs)
         else:
             # col parallel: matmul + allreduce
             assert Y_var_dim_mapping[0] < 0
             parallel_axis = Y_var_dim_mapping[1]
-            new_kwargs = copy.deepcopy(kwargs)
 
             # NOTE (JZ-LIANG) should allow left operand be empty for matmul grad
             has_x_grad = len(kwargs['X@GRAD']) > 0
-            if has_x_grad:
-                assert len(kwargs['X@GRAD']) == 1
-                X_grad = main_block.var(kwargs['X@GRAD'][0])
-                intermediate_var_0 = main_block.create_var(
-                    name=unique_name.generate_with_ignorable_key(".".join(
-                        ["c_identity", 'tmp'])) + "@GRAD",
-                    dtype=X_grad.dtype,
-                    shape=X_grad.shape,
-                    type=core.VarDesc.VarType.LOD_TENSOR,
-                    persistable=False,
-                    stop_gradient=X_grad.stop_gradient)
-
-                X_grad_dist_attr = dist_attr.get_output_dist_attr(X_grad.name)
-                assert X_grad_dist_attr is not None
-                ctx.set_tensor_dist_attr_for_program(intermediate_var_0,
-                                                     X_grad_dist_attr)
-                new_kwargs['X@GRAD'] = [intermediate_var_0.name]
-
             matmul_op_desc = copy_op_with_new_input_output(
-                main_block, backward_op, **new_kwargs)
+                main_block, backward_op, **kwargs)
 
             # NOTE (JZ-LIANG) trick to skip one allreduce if left operand has not grad
             if has_x_grad:
@@ -289,7 +228,7 @@ def _right_operand_parameter_matmul_backward(ctx, *args, **kwargs):
                 group = new_process_group(group_ranks)
                 c_allreduce_sum_op = main_block.append_op(
                     type='c_allreduce_sum',
-                    inputs={'X': [intermediate_var_0.name]},
+                    inputs={'X': kwargs['X@GRAD']},
                     outputs={'Out': kwargs['X@GRAD']},
                     attrs={
                         'ring_id': group.id,
@@ -1292,39 +1231,15 @@ class DistributedMatmulV2Impl0(DistributedOperatorImpl):
         ref_shape_out = infer_shape(main_block, Out_var, out_tensor_dist_attr,
                                     out_var_dist_attr)
 
-        intermediate_var_0 = main_block.create_var(
-            name=unique_name.generate_with_ignorable_key(".".join(
-                ["c_identity", 'tmp'])),
-            dtype=X_var.dtype,
-            shape=X_var.shape,
-            type=core.VarDesc.VarType.LOD_TENSOR,
-            persistable=False,
-            stop_gradient=X_var.stop_gradient)
-        # set intermediate_var_0's dist_attr with X_var's dist_attr
-        ctx.set_tensor_dist_attr_for_program(intermediate_var_0,
-                                             identity_var_dist_attr)
+        if X_var.shape != ref_shape_x:
+            X_var.desc.set_shape(ref_shape_x)
 
-        check_variable_and_dtype(
-            X_var, 'tensor',
-            ['float16', 'float32', 'float64', 'int32', 'int64'], '_c_identity')
-        c_identity_op = main_block.append_op(
-            type='c_identity',
-            inputs={'X': [X_var]},
-            outputs={'Out': intermediate_var_0},
-            attrs={
-                'ring_id': group.id,
-                'use_calc_stream': True,
-                'use_model_parallel': True,
-            })
-        if intermediate_var_0.shape != ref_shape_x:
-            intermediate_var_0.desc.set_shape(ref_shape_x)
-
-        check_variable_and_dtype(intermediate_var_0, 'x',
-                                 ['float16', 'float32', 'float64'], 'linear')
-        check_dtype(intermediate_var_0.dtype, 'dtype',
-                    ['float16', 'float32', 'float64'], 'linear')
+        check_variable_and_dtype(X_var, 'x', ['float16', 'float32', 'float64'],
+                                 'linear')
+        check_dtype(X_var.dtype, 'dtype', ['float16', 'float32', 'float64'],
+                    'linear')
         attrs = {'trans_x': False, 'trans_y': False}
-        inputs = {'X': [intermediate_var_0], 'Y': [Weight_var]}
+        inputs = {'X': [X_var], 'Y': [Weight_var]}
         matmul_v2_op = main_block.append_op(
             type='matmul_v2',
             inputs=inputs,
@@ -1332,24 +1247,6 @@ class DistributedMatmulV2Impl0(DistributedOperatorImpl):
             attrs=attrs)
         if Out_var.shape != ref_shape_out:
             Out_var.desc.set_shape(ref_shape_out)
-
-        # set dist op's dist_attr with serial op's dist_attr
-        # c_identity
-        identity_op_dist_attr = OperatorDistributedAttribute()
-        identity_op_dist_attr.process_mesh = op_dist_attr.process_mesh
-        identity_op_dist_attr.impl_idx = op_dist_attr.impl_idx
-        # input
-        input_varname = c_identity_op.desc.input_arg_names()[0]
-        input_dist_attr = op_dist_attr.get_input_dist_attr(input_varname)
-        assert input_dist_attr is not None, "dist_attr is {}".format(
-            op_dist_attr)
-        identity_op_dist_attr.set_input_dist_attr(input_varname,
-                                                  input_dist_attr)
-        # output
-        output_varname = c_identity_op.desc.output_arg_names()[0]
-        identity_op_dist_attr.set_output_dist_attr(output_varname,
-                                                   input_dist_attr)
-        ctx.set_op_dist_attr_for_program(c_identity_op, identity_op_dist_attr)
 
         # matmulv2
         matmulv2_op_dist_attr = OperatorDistributedAttribute()
@@ -1590,29 +1487,17 @@ class DistributedMatmulV2Impl1(DistributedOperatorImpl):
         ref_shape = infer_shape(main_block, Out_var, out_tensor_dist_attr,
                                 out_var_dist_attr)
 
-        intermediate_var_0 = main_block.create_var(
-            shape=Out_var.shape,
-            dtype=Out_var.dtype,
-            type=Out_var.type,
-            lod_level=Out_var.lod_level,
-            persistable=False,
-            is_data=False,
-            need_check_feed=Out_var.desc.need_check_feed())
-        # set intermediate_var_0's dist_attr with Out_var's dist_attr
-        ctx.set_tensor_dist_attr_for_program(intermediate_var_0,
-                                             out_var_dist_attr)
-
         matmul_v2_op = main_block.append_op(
             type='matmul_v2',
             inputs=inputs,
-            outputs={'Out': intermediate_var_0},
+            outputs={'Out': Out_var},
             attrs=attrs)
-        if intermediate_var_0.shape != ref_shape:
-            intermediate_var_0.desc.set_shape(ref_shape)
+        if Out_var.shape != ref_shape:
+            Out_var.desc.set_shape(ref_shape)
 
         c_allreduce_sum_op = main_block.append_op(
             type='c_allreduce_sum',
-            inputs={'X': intermediate_var_0},
+            inputs={'X': Out_var},
             outputs={'Out': Out_var},
             attrs={
                 'ring_id': group.id,

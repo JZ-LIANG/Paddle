@@ -369,54 +369,11 @@ class DistributedEmbeddingImpl(DistributedOperatorImpl):
         per_part_size = Weight_var.shape[0]
         relative_idx = relative_idx * per_part_size
 
-        check_variable_and_dtype(
-            Out_grad, 'tensor',
-            ['float16', 'float32', 'float64', 'int32', 'int64'], '_c_identity')
-
-        intermediate_var_0 = main_block.create_var(
-            name=unique_name.generate_with_ignorable_key(".".join(
-                ["c_embedding", '@tmp_0@GRAD'])),
-            dtype=Out_grad.dtype,
-            shape=Out_grad.shape,
-            type=core.VarDesc.VarType.LOD_TENSOR,
-            persistable=False,
-            stop_gradient=Out_grad.stop_gradient)
-
-        # copy X_var's dist_attr to intermediate_var_0's dist_attr
-        out_grad_dist_attr = dist_attr.get_input_dist_attr(Out_grad.name)
-        assert out_grad_dist_attr is not None
-        ctx.set_tensor_dist_attr_for_program(intermediate_var_0,
-                                             out_grad_dist_attr)
-
-        group_ranks = _get_comm_group(process_mesh_group, process_mesh_shape,
-                                      embedding_row_dim_mapping, rank_id)
-        group = new_process_group(group_ranks)
-
-        c_identity_op = main_block.append_op(
-            type='c_identity',
-            inputs={'X': [Out_grad]},
-            outputs={'Out': intermediate_var_0},
-            attrs={
-                'ring_id': group.id,
-                'use_calc_stream': True,
-                'use_model_parallel': True,
-                OP_ROLE_KEY: OpRole.Backward,
-            })
-        check_variable_and_dtype(intermediate_var_0, 'x',
-                                 ['float16', 'float32', 'float64'], 'linear')
-        check_dtype(intermediate_var_0.dtype, 'dtype',
-                    ['float16', 'float32', 'float64'], 'linear')
-
-        set_comm_op_dist_attr_for_program(c_identity_op, dist_attr.process_mesh,
-                                          out_grad_dist_attr, ctx)
-
-        main_block._sync_with_cpp()
         c_embedding_grad_op_desc = main_block.desc.append_op()
         c_embedding_grad_op_desc.set_type("c_embedding_grad")
         c_embedding_grad_op_desc.set_input('Ids', [Ids_var.name])
         c_embedding_grad_op_desc.set_input('W', [Weight_var.name])
-        c_embedding_grad_op_desc.set_input('Out@GRAD',
-                                           [intermediate_var_0.name])
+        c_embedding_grad_op_desc.set_input('Out@GRAD', [Out_grad.name])
         c_embedding_grad_op_desc.set_output('W@GRAD', [Weight_grad.name])
         c_embedding_grad_op_desc._set_attr('start_index', relative_idx)
         c_embedding_grad_op_desc._set_attr(OP_ROLE_KEY, OpRole.Backward)
