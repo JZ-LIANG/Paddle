@@ -222,6 +222,10 @@ def _right_operand_parameter_matmul_backward(ctx, *args, **kwargs):
 
             # NOTE (JZ-LIANG) trick to skip one allreduce if left operand has not grad
             if has_x_grad:
+                assert len(kwargs['X@GRAD']) == 1
+                X_grad = main_block.var(kwargs['X@GRAD'][0])
+                X_grad_dist_attr = dist_attr.get_output_dist_attr(X_grad.name)
+                assert X_grad_dist_attr is not None
                 group_ranks = _get_comm_group(process_mesh_group,
                                               process_mesh_shape, parallel_axis,
                                               rank_id)
