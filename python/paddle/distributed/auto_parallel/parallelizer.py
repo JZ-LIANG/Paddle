@@ -132,7 +132,7 @@ class AutoParallelizer:
                 distop_context=self._dist_context.dist_op_context)
         self._completer = Completer(self._dist_context)
         self._completer.complete_backward_annotation(main_program)
-        self._dist_context.block_state.parse_backward_blocks(main_program)
+        # self._dist_context.block_state.parse_backward_blocks(main_program)
         return params_grads
 
     def _apply_optimize(self, main_program, startup_program, params_grads):
@@ -170,6 +170,7 @@ class AutoParallelizer:
                 [main_program], [startup_program], self._pass_context)
 
     def _get_dist_program(self, rank, dist_context=None, relaunch_phase=False):
+        record_time1 = time.time()
         completed_main_program = None
         serial_main_program = self._main_program.clone()
         serial_startup_program = self._startup_program.clone()
@@ -186,38 +187,66 @@ class AutoParallelizer:
         else:
             completed_main_program = serial_main_program
             self._dist_context = copy.deepcopy(dist_context)
-
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for complete_forward_annotation: ",
+            duration)
+        record_time1 = time.time()
         # parse forward sub block
-        self._dist_context.block_state.parse_forward_blocks(serial_main_program)
+        # self._dist_context.block_state.parse_forward_blocks(serial_main_program)
 
         # serial backward pass
         params_grads = self._generate_backward(
             completed_main_program, serial_startup_program, serial_loss,
             self._parameter_list, self._no_grad_set, self._callbacks)
-
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for _generate_backward: ",
+            duration)
+        record_time1 = time.time()
         # serial forward pass
         self._apply_pre_optimization_passes(completed_main_program,
                                             serial_startup_program, serial_loss,
                                             params_grads, self._no_grad_set)
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for _apply_pre_optimization_passes: ",
+            duration)
+        record_time1 = time.time()
         # Logical partition 
         partitioner = Partitioner(self._dist_context, rank)
         dist_main_prog, dist_startup_prog, dist_params_grads = partitioner.partition(
             completed_main_program, serial_startup_program, params_grads)
-
+        duration = time.time() - record_time1
+        print("TIMING: inside  _get_dist_program(), duration for Partitioner: ",
+              duration)
+        record_time1 = time.time()
         # TODO refactor the placement of optimizer
         # generate optimize program
         dist_optimize_ops = self._apply_optimize(
             dist_main_prog, dist_startup_prog, dist_params_grads)
-
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for _apply_optimize: ",
+            duration)
+        record_time1 = time.time()
         set_grad_var_shape(dist_main_prog, self._dist_context)
 
         make_data_unshard(dist_main_prog, dist_startup_prog, self._dist_context)
 
         reshard(dist_main_prog, dist_startup_prog, rank, self._dist_context,
                 dist_params_grads)
-
+        duration = time.time() - record_time1
+        print("TIMING: inside  _get_dist_program(), duration for reshard: ",
+              duration)
+        record_time1 = time.time()
         self._apply_post_optimization_passes(dist_main_prog, dist_startup_prog,
                                              rank, dist_params_grads)
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for _apply_post_optimization_passes: ",
+            duration)
+        record_time1 = time.time()
         g_process_group_map = None
         if not relaunch_phase:
             g_process_group_map = copy.deepcopy(_g_process_group_map)
@@ -228,6 +257,11 @@ class AutoParallelizer:
             _g_process_group_map[0] = ProcessGroup(0, [])
             for process_mesh in dist_context._process_meshes:
                 _g_process_group_map[0].add_ranks(process_mesh.processes)
+        duration = time.time() - record_time1
+        print(
+            "TIMING: inside  _get_dist_program(), duration for _g_process_group_map: ",
+            duration)
+        record_time1 = time.time()
         return dist_optimize_ops, dist_params_grads, dist_startup_prog, dist_main_prog, g_process_group_map
 
     def parallelize(self,
@@ -243,6 +277,8 @@ class AutoParallelizer:
         self._parameter_list = parameter_list
         self._no_grad_set = no_grad_set
         self._callbacks = callbacks
+        record_time = time.time()
+        print("TIMING: parallelizer() called: ", record_time)
 
         if self._enable_auto_mapping and self._need_rank_mapping:
             # Do the mapping pass before parallelization
@@ -378,6 +414,9 @@ class AutoParallelizer:
                 pg0 = get_process_group(0)
                 for process_mesh in dist_context._process_meshes:
                     pg0.add_ranks(process_mesh.processes)
+            duration = time.time() - record_time
+            print("TIMING: parallelizer() to _get_dist_program(): ", duration)
+            record_time = time.time()
             dist_optimize_ops, dist_params_grads, dist_startup_prog, dist_main_prog, _ = self._get_dist_program(
                 rank, dist_context, relaunch_phase=True)
 
@@ -406,7 +445,8 @@ class AutoParallelizer:
             # The last step: remove all distributed attributes to be compatible
             # with inference.
             self._remove_distributed_attrs(dist_main_prog)
-
+            duration = time.time() - record_time
+            print("TIMING: _get_dist_program() to return: ", duration)
             return dist_optimize_ops, dist_params_grads, dist_startup_prog, dist_main_prog
 
     def __deepcopy__(self, memo):
