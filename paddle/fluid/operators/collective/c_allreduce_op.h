@@ -484,7 +484,7 @@ class CAllReduceOpCUDAKernel : public framework::OpKernel<T> {
     if (ctx.Attr<bool>("use_calc_stream")) {
       // auto dev_ctx = platform::DeviceContextPool::Instance().Get(place);
       // stream = static_cast<phi::GPUContext*>(dev_ctx)->stream();
-      stream = static_cast<phi::GPUContext>(ctx.device_context()).stream();
+      stream = static_cast<phi::GPUContext*>(ctx.device_context())->stream();
     } else {
       stream = comm->stream();
     }
