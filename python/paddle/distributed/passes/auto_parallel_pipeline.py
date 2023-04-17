@@ -38,6 +38,12 @@ __not_shape_var_type__ = [
 ]
 
 
+def is_reshard_op(op):
+    return op.has_attr('op_namescope') and "/auto_parallel/reshard" in op.attr(
+        'op_namescope'
+    )
+
+
 @register_pass("auto_parallel_pipeline")
 class PipelinePass(PassBase):
     def __init__(self):
@@ -464,7 +470,6 @@ class PipelinePass(PassBase):
         }
 
     def _task_stream(self):
-        #
         num_of_functionality = 5
         start_prog = Program()
         cond_prog = Program()
@@ -473,6 +478,7 @@ class PipelinePass(PassBase):
         recv_prog = Program()
 
         cond_var_name = None
+        # record the varnames related to the while cond vars and communicate by nccl
         send_vars_name = set()
         recv_vars_name = dict()
         for ib, src_block in enumerate(self._program.blocks):
@@ -497,38 +503,23 @@ class PipelinePass(PassBase):
                             src_block, end_block, op, force_create=True
                         )
             elif ib == 1:
+                # NOTE: The while block will be split to two separate blocks.
+                # The send_block:
+                #     include all ops about tansformer generation
+                #     execlude the nccl op about the while cond var
+                # The recv_block:
+                #     include all ops about the while cond var
+                #     execlude the nccl op about the while cond var
+                # the nccl op about cond var:
+                #     put these varnames in the task node and do communication by brpc
                 send_block = send_prog.block(0)
                 recv_block = recv_prog.block(0)
 
                 is_after_send_op = False
                 is_after_recv_op = False
-                for op in src_block.ops:
+                for i, op in enumerate(src_block.ops):
                     if op.type == "send_v2" and not is_after_send_op:
                         is_after_send_op = True
-                        if self._cur_pp_stage == self._pp_stages - 1:
-                            if op.type in ["c_sync_calc_stream", "nop"]:
-                                continue
-                            if (
-                                op.type not in ["recv_2", "assign"]
-                                and op.has_attr('op_namescope')
-                                and "/auto_parallel/reshard"
-                                in op.attr('op_namescope')
-                            ):
-                                if (
-                                    len(op.desc.input_arg_names()) > 0
-                                    and "@RESHARD"
-                                    not in op.desc.input_arg_names()[0]
-                                ):
-                                    send_vars_name.add(
-                                        op.desc.input_arg_names()[0]
-                                    )
-                                    continue
-                                if op.type == "send_v2":
-                                    continue
-                        self._create_program(
-                            src_block, send_block, op, force_create=True
-                        )
-                        continue
 
                     if (
                         is_after_send_op
@@ -536,45 +527,21 @@ class PipelinePass(PassBase):
                         and op.type == "recv_v2"
                     ):
                         is_after_recv_op = True
-                        if op.has_attr(
-                            'op_namescope'
-                        ) and "/auto_parallel/reshard" in op.attr(
-                            'op_namescope'
-                        ):
-                            var_name = op.desc.output_arg_names()[0]
-                            index = var_name.find("@")
-                            if index > 0:
-                                old_var_name = var_name[:index]
-                            else:
-                                old_var_name = var_name
-                            recv_vars_name[var_name] = old_var_name
-                            if not src_block._find_var_recursive(old_var_name):
-                                src_var = src_block._var_recursive(var_name)
-                                recv_block.create_var(
-                                    type=src_var.type,
-                                    name=old_var_name,
-                                    shape=src_var.shape,
-                                    dtype=src_var.dtype,
-                                    lod_level=src_var.lod_level,
-                                    persistable=src_var.persistable,
-                                    error_clip=src_var.error_clip,
-                                    stop_gradient=src_var.stop_gradient,
-                                    is_data=src_var.is_data,
-                                    belong_to_optimizer=src_var.belong_to_optimizer,
-                                )
-                            continue
-
-                        self._create_program(
-                            src_block, recv_block, op, force_create=True
-                        )
-                        continue
 
                     if not is_after_send_op or not is_after_recv_op:
                         if self._cur_pp_stage == self._pp_stages - 1:
-                            if op.type in ["c_sync_calc_stream", "nop"]:
-                                continue
+                            # the c_sync_calc_stream about c_allgather cannot be removed
                             if (
-                                op.type not in ["recv_2", "assign"]
+                                op.type == "c_sync_calc_stream"
+                                and src_block.ops[i + 1].type == "send_v2"
+                            ):
+                                continue
+                            if op.type == "nop":
+                                continue
+                            # HACKCODE: the varname of send_v2 op, cast op should be recorded for brpc comm
+                            if (
+                                op.type
+                                not in ["recv_2", "assign", "c_allgather"]
                                 and op.has_attr('op_namescope')
                                 and "/auto_parallel/reshard"
                                 in op.attr('op_namescope')
@@ -593,13 +560,16 @@ class PipelinePass(PassBase):
                         self._create_program(
                             src_block, send_block, op, force_create=True
                         )
+                        continue
 
                     if is_after_send_op and is_after_recv_op:
+                        # HACKCODE: the varname of recv_v2 op, assign op should be recorded for brpc comm
                         if op.has_attr(
                             'op_namescope'
                         ) and "/auto_parallel/reshard" in op.attr(
                             'op_namescope'
                         ):
+                            # remove the suffix of "@RESHARD"
                             var_name = op.desc.output_arg_names()[0]
                             index = var_name.find("@")
                             if index > 0:
@@ -631,6 +601,7 @@ class PipelinePass(PassBase):
                         self._create_program(
                             src_block, recv_block, op, force_create=True
                         )
+                        continue
             else:
                 raise Exception("Only support generation condition.")
 
